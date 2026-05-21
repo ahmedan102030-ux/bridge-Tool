@@ -2,9 +2,24 @@ import streamlit as st
 import pandas as pd
 import re
 from collections import Counter
+import requests
+import json
 
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
+
+# القائمة الجانبية للتحكم في الـ AI والأمان
+with st.sidebar:
+    st.header("⚙️ AI Configuration")
+    # زرار التحكم: تشغيل أو إيقاف الـ AI بناءً على رغبتك
+    enable_ai = st.checkbox("🔮 Enable Gemini AI Analysis", value=False, 
+                            help="Turn on to get deep AI justifications, turn off to use standard logic and save API limits.")
+    
+    # مكان تحط فيه الـ API Key بتاعك علشان الأمان والـ Limits
+    ai_key = st.text_input("Enter Gemini API Key:", type="password", 
+                          placeholder="AIzaSy...")
+    if enable_ai and not ai_key:
+        st.warning("⚠️ Please provide an API key to use the AI feature.")
 
 st.subheader("1. Upload Primary Data Sheet")
 primary_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"], key="primary")
@@ -39,7 +54,8 @@ def extract_english_only(text):
     if "da issue" in cl_lower or "shortage" in cl_lower: return "DA Issue"
     return cleaned if cleaned else "Others"
 
-def generate_hourly_integrated_context(reason, count, total_vol, hours_list, forecast_df):
+# الدالة الافتراضية العادية (Standard Logic) - سريعة وبدون ليميت
+def generate_standard_context(reason, count, total_vol, hours_list, forecast_df):
     real_percentage = (count / total_vol) * 100
     hour_counts = Counter(hours_list)
     sorted_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)
@@ -51,11 +67,8 @@ def generate_hourly_integrated_context(reason, count, total_vol, hours_list, for
     period_str = " and ".join(time_periods) if time_periods else "various shifts"
 
     if "order count" in reason.lower():
-        peak_parts = []
-        for h, c in sorted_hours[:3]:
-            peak_parts.append(f"Hour {h} had {c} cases")
+        peak_parts = [f"Hour {h} had {c} cases" for h, c in sorted_hours[:3]]
         peak_str = ", ".join(peak_parts)
-        
         ctx = f"This driver impacted {real_percentage:.2f}% of our total volume. Disruptions concentrated heavily during {period_str} ({peak_str})."
         
         if forecast_df is not None and not forecast_df.empty:
@@ -67,30 +80,52 @@ def generate_hourly_integrated_context(reason, count, total_vol, hours_list, for
                     for_v = match.iloc[0]['Forecast']
                     if act_v > for_v:
                         justifications.append(f"Hour {h} spiked with Actual volume reaching {int(act_v):,} against a forecast of {int(for_v):,}")
-            
             if justifications:
                 ctx += " Driven by volume mismatches where " + ", and ".join(justifications) + "."
         return ctx
-                
     elif "net" in reason.lower():
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
-        return (f"Network/system connectivity constraints registered across {period_str} "
-                f"(Hours {hours_formatted}), holding a minor share against total dispatched volume.")
-                
+        return f"Network/system connectivity constraints registered across {period_str} (Hours {hours_formatted}), holding a minor share against total dispatched volume."
     elif "multi" in reason.lower():
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
-        return (f"Delays related to multiple package orders, appearing consistently in the "
-                f"{period_str} (Hours {hours_formatted}).")
-                
-    elif count <= 2:
-        if len(hours_list) > 0:
-            h = hours_list[0]
-            if "customer" in reason.lower(): return f"Isolated customer unavailability issue during the {h}:00 shift."
-            return f"Isolated case recorded during the {h}:00 shift."
-        return ""
+        return f"Delays related to multiple package orders, appearing consistently in the {period_str} (Hours {hours_formatted})."
+    elif count <= 2 and len(hours_list) > 0:
+        return f"Isolated case recorded during the {hours_list[0]}:00 shift."
     else:
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
+
+# الدالة الذكية (Gemini AI Logic) - بتشتغل بس لما تفعل الزرار
+def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str, key):
+    real_percentage = (count / total_vol) * 100
+    hour_counts = dict(Counter(hours_list))
+    
+    prompt = (
+        f"You are a professional Amazon Logistics Operations Manager analyzing a delivery bridge report.\n"
+        f"Analyze this specific issue and write a concise, professional, 2-line 'Context' for the management report.\n\n"
+        f"Issue Name: {reason}\n"
+        f"Total Cases: {count}\n"
+        f"Impact on Total Volume: {real_percentage:.2f}%\n"
+        f"Hourly Distribution Breakdown: {hour_counts}\n"
+        f"Available Forecast vs Actual Data for matching: {forecast_data_str}\n\n"
+        f"Rules:\n"
+        f"1. Write ONLY the 2 lines of context. No greetings, no intro.\n"
+        f"2. Use professional corporate language (e.g., 'Disruptions peaked during...', 'Driven by volume mismatch...').\n"
+        f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
+    )
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+    headers = {'Content-Type': 'application/json'}
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    
+    try:
+        res = requests.post(url, headers=headers, data=json.dumps(payload))
+        if res.status_code == 200:
+            return res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        else:
+            return f"AI Error ({res.status_code}). Falling back to standard logic: " + generate_standard_context(reason, count, total_vol, hours_list, None)
+    except:
+        return generate_standard_context(reason, count, total_vol, hours_list, None)
 
 if primary_file:
     if primary_file.name.endswith('.xlsx'): df = pd.read_excel(primary_file)
@@ -123,6 +158,7 @@ if primary_file:
         selected_df = df[df['Date'] == selected_date]
 
     forecast_df_clean = None
+    forecast_str_for_ai = "No Forecast sheet provided"
     if secondary_file:
         try:
             if secondary_file.name.endswith('.xlsx'): df_sec = pd.read_excel(secondary_file)
@@ -141,7 +177,8 @@ if primary_file:
                 df_sec['Forecast'] = pd.to_numeric(df_sec['Forecast'], errors='coerce').fillna(0)
                 df_sec['Hour Index'] = df_sec['Hour Index'].apply(clean_hour)
                 forecast_df_clean = df_sec
-                st.success("✅ Forecast Sheet processed successfully. Hourly mapper active.")
+                forecast_str_for_ai = df_sec[['Hour Index', 'Forecast', 'Actual']].to_string(index=False)
+                st.success("✅ Forecast Sheet processed successfully.")
         except Exception as e:
             st.error(f"Error parsing forecast data: {e}")
 
@@ -163,18 +200,29 @@ if primary_file:
         report_text += "Dear Team,\n\n"
         report_text += f"This report provides an operational overview of metrics relative to a Total Volume of {total_volume:,} orders, capturing {total_incidents} logged incidents.\n\n"
         
+        # شريط تحميل يوضح حالة المعالجة
+        progress_bar = st.progress(0)
+        total_reasons = len(summary_df)
+        
         for idx, row in enumerate(summary_df.itertuples(), 1):
             v_percentage = (row.Count / total_volume) * 100
             suffix = ' "Courier Support"' if "multi package" in row._1.lower() else ""
-            
             report_text += f"{idx}- {row._1}: {row.Count} cases ({v_percentage:.2f}% of Total Volume){suffix}\n"
-            context_string = generate_hourly_integrated_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
+            
+            # القرار هنا: هل الـ AI شغال والـ Key موجود؟
+            if enable_ai and ai_key:
+                context_string = generate_ai_context(row._1, row.Count, total_volume, row.HoursList, forecast_str_for_ai, ai_key)
+            else:
+                context_string = generate_standard_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
+                
             if context_string: report_text += f"Context: {context_string}\n\n"
             else: report_text += "\n"
             
+            progress_bar.progress(idx / total_reasons)
+            
         report_text += "Best regards,\nAmazon Egypt Logistics Team"
         
-        st.subheader("📋 Generated Bridge Report (Hour-by-Hour Mapping)")
+        st.subheader("📋 Generated Bridge Report")
         st.text_area("Final Output:", value=report_text, height=500)
 else:
     st.info("💡 Please upload the Primary Data Sheet to activate.")
