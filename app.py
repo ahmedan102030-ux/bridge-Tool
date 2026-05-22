@@ -8,16 +8,11 @@ import json
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
 
-# القائمة الجانبية للتحكم في الـ AI والأمان
 with st.sidebar:
     st.header("⚙️ AI Configuration")
-    # زرار التحكم: تشغيل أو إيقاف الـ AI بناءً على رغبتك
     enable_ai = st.checkbox("🔮 Enable Gemini AI Analysis", value=False, 
                             help="Turn on to get deep AI justifications, turn off to use standard logic and save API limits.")
-    
-    # مكان تحط فيه الـ API Key بتاعك علشان الأمان والـ Limits
-    ai_key = st.text_input("Enter Gemini API Key:", type="password", 
-                          placeholder="AIzaSy...")
+    ai_key = st.text_input("Enter Gemini API Key:", type="password", placeholder="AIzaSy...")
     if enable_ai and not ai_key:
         st.warning("⚠️ Please provide an API key to use the AI feature.")
 
@@ -42,7 +37,6 @@ def extract_english_only(text):
     cleaned = re.sub(r'[\u0600-\u06FF]', '', txt_str)
     cleaned = cleaned.replace("-", "").strip()
     cleaned = " ".join(cleaned.split())
-    
     cl_lower = cleaned.lower()
     if "order count" in cl_lower or "order volume" in cl_lower: return "Order Count Issue"
     if "net issue" in cl_lower or "network" in cl_lower: return "Net Issue"
@@ -54,12 +48,10 @@ def extract_english_only(text):
     if "da issue" in cl_lower or "shortage" in cl_lower: return "DA Issue"
     return cleaned if cleaned else "Others"
 
-# الدالة الافتراضية العادية (Standard Logic) - سريعة وبدون ليميت
 def generate_standard_context(reason, count, total_vol, hours_list, forecast_df):
     real_percentage = (count / total_vol) * 100
     hour_counts = Counter(hours_list)
     sorted_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)
-    
     time_periods = []
     if any(0 <= h <= 6 for h in hours_list): time_periods.append("midnight/early morning")
     if any(7 <= h <= 15 for h in hours_list): time_periods.append("midday peaks")
@@ -70,7 +62,6 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         peak_parts = [f"Hour {h} had {c} cases" for h, c in sorted_hours[:3]]
         peak_str = ", ".join(peak_parts)
         ctx = f"This driver impacted {real_percentage:.2f}% of our total volume. Disruptions concentrated heavily during {period_str} ({peak_str})."
-        
         if forecast_df is not None and not forecast_df.empty:
             justifications = []
             for h, _ in sorted_hours[:3]:
@@ -95,7 +86,6 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-# الدالة الذكية بعد تحديث مسار الموديل لحل مشكلة الـ 404 نهائياً
 def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str, key):
     real_percentage = (count / total_vol) * 100
     hour_counts = dict(Counter(hours_list))
@@ -114,8 +104,8 @@ def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str,
         f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
     )
     
-    # تم تحديث الرابط هنا إلى gemini-1.5-flash-latest المضمون
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={key}"
+    # استخدام المسار الرسمي لـ Gemini 2.0 Flash
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
@@ -164,11 +154,9 @@ if primary_file:
         try:
             if secondary_file.name.endswith('.xlsx'): df_sec = pd.read_excel(secondary_file)
             else: df_sec = pd.read_csv(secondary_file)
-            
             df_sec.columns = [str(c).strip() for c in df_sec.columns]
             for h_col in df_sec.columns:
                 if "hour" in str(h_col).lower(): df_sec = df_sec.rename(columns={h_col: "Hour Index"})
-            
             f_col = [c for c in df_sec.columns if "fore" in str(c).lower()]
             a_col = [c for c in df_sec.columns if "act" in str(c).lower() or "order" in str(c).lower()]
             
@@ -216,11 +204,9 @@ if primary_file:
                 
             if context_string: report_text += f"Context: {context_string}\n\n"
             else: report_text += "\n"
-            
             progress_bar.progress(idx / total_reasons)
             
         report_text += "Best regards,\nAmazon Egypt Logistics Team"
-        
         st.subheader("📋 Generated Bridge Report")
         st.text_area("Final Output:", value=report_text, height=500)
 else:
