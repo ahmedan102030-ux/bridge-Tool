@@ -4,6 +4,7 @@ import re
 from collections import Counter
 import requests
 import json
+import time # ضيفنا مكتبة الوقت علشان نهدّي السيرفر
 
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
@@ -104,7 +105,6 @@ def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str,
         f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
     )
     
-    # استخدام المسار الرسمي لـ Gemini 2.0 Flash
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -199,6 +199,7 @@ if primary_file:
             
             if enable_ai and ai_key:
                 context_string = generate_ai_context(row._1, row.Count, total_volume, row.HoursList, forecast_str_for_ai, ai_key)
+                time.sleep(2) # 🛑 التعديل السحري هنا: بنخلي الكود يستنى ثانيتين بين كل طلب والتاني علشان نتفادى خطأ 429
             else:
                 context_string = generate_standard_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
                 
