@@ -95,7 +95,7 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-# الدالة الذكية بعد تحديث الـ URL النهائي لتفادي خطأ 404
+# الدالة الذكية بعد تحديث مسار الموديل لحل مشكلة الـ 404 نهائياً
 def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str, key):
     real_percentage = (count / total_vol) * 100
     hour_counts = dict(Counter(hours_list))
@@ -114,8 +114,8 @@ def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str,
         f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
     )
     
-    # تم تعديل الرابط هنا ليكون الاصدار المستقر v1 من جوجل
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={key}"
+    # تم تحديث الرابط هنا إلى gemini-1.5-flash-latest المضمون
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
