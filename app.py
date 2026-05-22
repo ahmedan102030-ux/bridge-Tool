@@ -3,7 +3,11 @@ import pandas as pd
 import re
 from collections import Counter
 import json
-import io
+
+# Function to generate CSV template for downloading
+def get_csv_template(columns):
+    df = pd.DataFrame(columns=columns)
+    return df.to_csv(index=False).encode('utf-8')
 
 # ✨ استيراد المكتبة الرسمية من جوجل لمنع أخطاء الاتصال تماماً
 try:
@@ -14,12 +18,6 @@ except ImportError:
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
 
-# Function to generate CSV template
-def get_csv_template(columns):
-    df = pd.DataFrame(columns=columns)
-    csv = df.to_csv(index=False).encode('utf-8')
-    return csv
-
 with st.sidebar:
     st.header("⚙️ AI Configuration")
     enable_ai = st.checkbox("🔮 Enable Gemini AI Analysis", value=False, 
@@ -29,7 +27,7 @@ with st.sidebar:
         st.warning("⚠️ Please provide an API key to use the AI feature.")
 
 st.subheader("1. Upload Primary Data Sheet")
-# Download Button Added
+# --- إضافة زر التمبلت للأول ---
 st.download_button(
     label="📥 Download Primary Data Template",
     data=get_csv_template(["Date", "Hour Index", "Order ID", "Sub-reason", "Comment"]),
@@ -39,7 +37,7 @@ st.download_button(
 primary_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"], key="primary")
 
 st.subheader("2. Upload Forecast vs Actual Sheet")
-# Download Button Added
+# --- إضافة زر التمبلت للثاني ---
 st.download_button(
     label="📥 Download Forecast Data Template",
     data=get_csv_template(["Date", "Hour Index", "Forecast", "Actual"]),
