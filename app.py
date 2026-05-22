@@ -44,7 +44,7 @@ def extract_english_only(text):
     if "customer later" in cl_lower: return "Customer Later Arrival"
     if "late delivery" in cl_lower: return "Late Delivery"
     if "parking" in cl_lower: return "Parking Issue"
-    if "wrong scan" in cl_lower: return "Wrong Scan"  # ✨ السطر ده اتنظف واتصلح هنا تماماً
+    if "wrong scan" in cl_lower: return "Wrong Scan"
     if "da issue" in cl_lower or "shortage" in cl_lower: return "DA Issue"
     return cleaned if cleaned else "Others"
 
@@ -112,7 +112,9 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
-    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){key}"
+    # تنظيف المفتاح من أي مسافات زائدة أوتوماتيكياً
+    clean_key = str(key).strip()
+    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){clean_key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
@@ -120,14 +122,14 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         res = requests.post(url, headers=headers, data=json.dumps(payload))
         if res.status_code == 200:
             raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-            
             raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
             raw_text = re.sub(r"\n```$", "", raw_text)
             raw_text = raw_text.strip()
-            
             return json.loads(raw_text)
+        else:
+            st.sidebar.error(f"🔴 Google API Error: Code {res.status_code}")
     except Exception as e:
-        pass
+        st.sidebar.error(f"🔴 Connection Error: {e}")
     return {}
 
 if primary_file:
@@ -197,10 +199,13 @@ if primary_file:
             
         summary_df = pd.DataFrame(summary_data).sort_values(by='Count', ascending=False)
         
+        # إجبار التول على الدخول هنا وعمل الـ Spinner
         ai_bulk_responses = {}
         if enable_ai and ai_key:
             with st.spinner("🔮 AI is analyzing all operational metrics at once... Please wait."):
                 ai_bulk_responses = generate_bulk_ai_contexts(summary_df, total_volume, forecast_str_for_ai, ai_key)
+        elif enable_ai and not ai_key:
+            st.error("❌ AI Checkbox is checked but Key is missing in sidebar!")
         
         report_text = f"**Operational Bridge Report - Amazon Egypt Logistics ({report_type})**\n\n"
         report_text += "Dear Team,\n\n"
@@ -222,6 +227,8 @@ if primary_file:
                 context_string = matched_context
             else:
                 context_string = generate_standard_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
+                if enable_ai and not matched_context:
+                    context_string = "[Fallback to Standard] " + context_string
                 
             if context_string: report_text += f"Context: {context_string}\n\n"
             else: report_text += "\n"
