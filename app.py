@@ -112,8 +112,8 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
-    # تنظيف المفتاح من أي مسافات زائدة أوتوماتيكياً
-    clean_key = str(key).strip()
+    # ✨ فلترة صارمة جداً لتنظيف الـ Key من أي علامات تنصيص أو مسافات خفيفة
+    clean_key = str(key).strip().replace("'", "").replace('"', "")
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){clean_key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -199,7 +199,6 @@ if primary_file:
             
         summary_df = pd.DataFrame(summary_data).sort_values(by='Count', ascending=False)
         
-        # إجبار التول على الدخول هنا وعمل الـ Spinner
         ai_bulk_responses = {}
         if enable_ai and ai_key:
             with st.spinner("🔮 AI is analyzing all operational metrics at once... Please wait."):
