@@ -44,7 +44,7 @@ def extract_english_only(text):
     if "customer later" in cl_lower: return "Customer Later Arrival"
     if "late delivery" in cl_lower: return "Late Delivery"
     if "parking" in cl_lower: return "Parking Issue"
-    if "wrong scan" in col_lower if "wrong scan" in cl_lower: return "Wrong Scan"
+    if "wrong scan" in cl_lower: return "Wrong Scan"  # ✨ السطر ده اتنظف واتصلح هنا تماماً
     if "da issue" in cl_lower or "shortage" in cl_lower: return "DA Issue"
     return cleaned if cleaned else "Others"
 
@@ -112,7 +112,6 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
-    # تصحيح الرابط هنا تماماً والتأكد من عدم وجود أي علامات زائدة
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
