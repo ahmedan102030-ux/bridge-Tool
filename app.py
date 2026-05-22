@@ -86,7 +86,7 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-# الدالة الجبارة الجديدة: بتبعت طلب واحد جماعي لكل الأسباب وتمنع الـ 429 نهائياً
+# تحسين صياغة الـ Bulk لضمان التنظيف التام لرد السيرفر
 def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
     input_data = []
     for row in summary_df.itertuples():
@@ -100,15 +100,17 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         })
         
     prompt = (
-        f"You are a professional Amazon Logistics Operations Manager analyzing a delivery bridge report.\n"
-        f"Analyze all the following issues listed in the JSON array below and write a concise, professional, 2-line 'Context' for EACH issue.\n\n"
-        f"Input Issues Data:\n{json.dumps(input_data, indent=2)}\n\n"
-        f"Available Forecast vs Actual Data for matching:\n{forecast_data_str}\n\n"
-        f"CRITICAL RULES:\n"
-        f"1. Respond ONLY with a valid JSON object mapping each 'Issue' name to its 2-line professional string 'Context'.\n"
-        f"2. Format example: {{\"Order Count Issue\": \"Context text here...\", \"Net Issue\": \"Context text here...\"}}\n"
-        f"3. Do not include markdown code block syntax (like ```json). Just the raw JSON object.\n"
-        f"4. Use professional Amazon corporate language. Mention shift peaks and forecast mismatches where applicable."
+        f"You are an expert Amazon Logistics Operations Manager writing a bridge report.\n"
+        f"Write a concise, professional, 2-line 'Context' for EACH issue listed below.\n\n"
+        f"Data:\n{json.dumps(input_data, indent=2)}\n\n"
+        f"Forecast Data:\n{forecast_data_str}\n\n"
+        f"OUTPUT INSTRUCTION:\n"
+        f"Return ONLY a pure JSON object mapping each issue name to its 2-line context string. Do not include markdown code block syntax like ```json. Your response must be clean JSON text only.\n"
+        f"Example format:\n"
+        f"{{\n"
+        f"  \"Order Count Issue\": \"Text here...\",\n"
+        f"  \"Net Issue\": \"Text here...\"\n"
+        f"}}"
     )
     
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){key}"
@@ -119,13 +121,15 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         res = requests.post(url, headers=headers, data=json.dumps(payload))
         if res.status_code == 200:
             raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-            # تنظيف أي علامات كود لو الـ AI استهبل وكتبها
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("```")[1]
-                if raw_text.startswith("json"): raw_text = raw_text[4:]
-            return json.loads(raw_text.strip())
-    except:
-        pass
+            
+            # تنظيف قوي ومحسّن للتخلص من أي أقواس كود ناتجة عن الـ AI
+            raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
+            raw_text = re.sub(r"\n```$", "", raw_text)
+            raw_text = raw_text.strip()
+            
+            return json.loads(raw_text)
+    except Exception as e:
+        st.sidebar.error(f"AI Formatting debug: {e}") # تنبيه داخلي في الجنب لو في مشكلة صياغة
     return {}
 
 if primary_file:
@@ -195,7 +199,6 @@ if primary_file:
             
         summary_df = pd.DataFrame(summary_data).sort_values(by='Count', ascending=False)
         
-        # جلب الـ AI لجيع الأسباب مرة واحدة لو الخاصية مفعّلة
         ai_bulk_responses = {}
         if enable_ai and ai_key:
             with st.spinner("🔮 AI is analyzing all operational metrics at once... Please wait."):
@@ -210,14 +213,18 @@ if primary_file:
             suffix = ' "Courier Support"' if "multi package" in row._1.lower() else ""
             report_text += f"{idx}- {row._1}: {row.Count} cases ({v_percentage:.2f}% of Total Volume){suffix}\n"
             
-            # سحب الصياغة المجهزة من الـ Bulk Response
-            if enable_ai and ai_key and row._1 in ai_bulk_responses:
-                context_string = ai_bulk_responses[row._1]
+            # مقارنة الاسم بطريقة مرنة ومقاومة لحالة الحروف الكبيرة والصغيرة
+            matched_context = None
+            if ai_bulk_responses:
+                for k, v in ai_bulk_responses.items():
+                    if str(k).strip().lower() == str(row._1).strip().lower():
+                        matched_context = v
+                        break
+            
+            if enable_ai and ai_key and matched_context:
+                context_string = matched_context
             else:
-                # لو الـ AI فشل لأي سبب يقلب علطول على الكود الثابت الآمن
                 context_string = generate_standard_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
-                if enable_ai and ai_key and not ai_bulk_responses:
-                    context_string = "AI Connection failed. Standard: " + context_string
                 
             if context_string: report_text += f"Context: {context_string}\n\n"
             else: report_text += "\n"
