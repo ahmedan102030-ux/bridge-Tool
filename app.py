@@ -4,53 +4,63 @@ import re
 from collections import Counter
 import json
 
-# --- 1. إعدادات الصفحة ---
+# محاولة استيراد مكتبة جوجل
+try:
+    import google.generativeai as genai
+except ImportError:
+    st.error("⚠️ Please install 'google-generativeai'")
+
 st.set_page_config(page_title="Operations Bridge Center", layout="wide")
 st.title("🚀 Operations Bridge Management System")
 
-# --- 2. دالة تنظيف البيانات (عامة لكل البريدجات) ---
-def clean_column_names(df):
+# --- دالة تنظيف الأعمدة (عامة) ---
+def clean_cols(df):
     df.columns = [str(c).strip().lower().replace("_", "").replace("-", "").replace(" ", "") for c in df.columns]
     return df
 
-# --- 3. القائمة الجانبية (التحكم في البريدجات) ---
+# --- القائمة الجانبية للتحكم ---
 st.sidebar.header("⚙️ Bridge Selector")
 bridge_option = st.sidebar.selectbox("اختر نوع البريدج:", ["OTP Bridge", "Store Closure Bridge"])
 
-# --- 4. منطق OTP Bridge (الكود القديم بعد التنظيف) ---
+# --- قسم الـ OTP Bridge ---
 def run_otp_bridge():
-    st.header("📊 OTP Bridge Analysis")
+    st.subheader("📊 OTP Bridge (Hour-by-Hour)")
     primary_file = st.file_uploader("Upload Primary Data", type=["csv", "xlsx"], key="otp_primary")
-    # ... (ضع هنا كود الـ OTP Bridge الخاص بك)
-    st.info("OTP Bridge logic active...")
+    secondary_file = st.file_uploader("Upload Forecast Sheet", type=["csv", "xlsx"], key="otp_secondary")
+    
+    # [هنا تضع منطق الـ OTP Bridge الذي أرسلته سابقاً بالكامل]
+    st.info("OTP Bridge Engine is ready. Integrate your processing logic here.")
 
-# --- 5. منطق Store Closure Bridge (الواجهة الجديدة) ---
+# --- قسم الـ Store Closure Bridge ---
 def run_store_closure():
-    st.header("🔒 Store Closure Bridge Analysis")
-    uploaded_file = st.file_uploader("Upload Store Closure Raw Data", type=["csv"], key="closure_file")
+    st.subheader("🔒 Store Closure Bridge Analysis")
+    uploaded_file = st.file_uploader("Upload Store Closure Raw Data (CSV)", type=["csv"], key="closure_file")
     
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        # هنا سنقوم بمعالجة أعمدة الـ Store Closure بناءً على الملف الذي أرسلته
-        # مثال: التجميع حسب 'Issue' وحساب 'Closure Mins'
-        st.success("✅ تم رفع ملف الـ Store Closure بنجاح!")
+        df = clean_cols(df)
+        
+        st.write("### 📂 معاينة البيانات:")
         st.dataframe(df.head())
         
-        if st.button("Generate Closure Report"):
-            # منطق توليد التقرير بالشكل الذي طلبته
-            st.write("### 📝 التقرير النهائي للـ Store Closure:")
-            # سنقوم هنا بكتابة الـ logic الخاص بتحليل الـ Issue و الـ Slots
-            st.text("هنا سيظهر تقرير الـ Store Closure الاحترافي...")
+        if st.button("🚀 Generate Closure Report"):
+            # منطق تحليل الـ Closure
+            summary = df.groupby('issue')['closuremins'].agg(['sum', 'count']).reset_index()
+            st.write("### 📝 تحليل الغلق:")
+            st.table(summary)
+            
+            # هنا يمكنك إضافة الـ Prompt الخاص بالذكاء الاصطناعي للـ Closure
+            st.success("التقرير جاهز (سيتم ربط النتائج بالصيغة التي طلبتها في الخطوة التالية).")
 
-# --- 6. التوجيه (Router) ---
+# --- توجيه التنفيذ ---
 if bridge_option == "OTP Bridge":
     run_otp_bridge()
 elif bridge_option == "Store Closure Bridge":
     run_store_closure()
 
-# --- 7. إعدادات الـ AI (موحدة للكل) ---
+# --- إعدادات الذكاء الاصطناعي (موحدة) ---
 with st.sidebar:
     st.markdown("---")
-    st.header("🔮 AI Config")
-    enable_ai = st.checkbox("Enable AI Analysis")
+    st.header("🔮 AI Configuration")
+    enable_ai = st.checkbox("Enable Gemini AI Analysis")
     ai_key = st.text_input("Gemini API Key:", type="password")
