@@ -2,8 +2,13 @@ import streamlit as st
 import pandas as pd
 import re
 from collections import Counter
-import requests
 import json
+
+# ✨ استيراد المكتبة الرسمية من جوجل لمنع أخطاء الاتصال تماماً
+try:
+    import google.generativeai as genai
+except ImportError:
+    st.error("⚠️ Please add 'google-generativeai' to your requirements.txt file on GitHub!")
 
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
@@ -112,28 +117,25 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
-    # تنظيف شامل وإجباري لأي شوائب في المفتاح برمجياً
+    # تنظيف المفتاح تماماً من أي شوائب خفية
     clean_key = str(key).strip().replace("'", "").replace('"', "")
     
-    # تعديل طريقة بناء الرابط لمنع أي تداخل نهائياً
-    base_url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)"
-    headers = {'Content-Type': 'application/json'}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    params = {"key": clean_key}
-    
     try:
-        # تمرير الـ Key كـ Parameter منفصل تماماً لمنع أخطاء الـ Adapters
-        res = requests.post(base_url, headers=headers, params=params, data=json.dumps(payload))
-        if res.status_code == 200:
-            raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-            raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
-            raw_text = re.sub(r"\n```$", "", raw_text)
-            raw_text = raw_text.strip()
-            return json.loads(raw_text)
-        else:
-            st.sidebar.error(f"🔴 Google API Error: Code {res.status_code}")
+        # تشغيل الاتصال الآمن والمباشر عبر مكتبة جوجل الرسمية
+        genai.configure(api_key=clean_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        
+        response = model.generate_content(prompt)
+        raw_text = response.text.strip()
+        
+        # تنظيف أي كود بلوك لو الذكاء الاصطناعي كتبه بالخطأ
+        raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
+        raw_text = re.sub(r"\n```$", "", raw_text)
+        raw_text = raw_text.strip()
+        
+        return json.loads(raw_text)
     except Exception as e:
-        st.sidebar.error(f"🔴 Connection Error: {e}")
+        st.sidebar.error(f"🔴 Gemini Library Error: {e}")
     return {}
 
 if primary_file:
