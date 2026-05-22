@@ -112,14 +112,18 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
-    # ✨ فلترة صارمة جداً لتنظيف الـ Key من أي علامات تنصيص أو مسافات خفيفة
+    # تنظيف شامل وإجباري لأي شوائب في المفتاح برمجياً
     clean_key = str(key).strip().replace("'", "").replace('"', "")
-    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){clean_key}"
+    
+    # تعديل طريقة بناء الرابط لمنع أي تداخل نهائياً
+    base_url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    params = {"key": clean_key}
     
     try:
-        res = requests.post(url, headers=headers, data=json.dumps(payload))
+        # تمرير الـ Key كـ Parameter منفصل تماماً لمنع أخطاء الـ Adapters
+        res = requests.post(base_url, headers=headers, params=params, data=json.dumps(payload))
         if res.status_code == 200:
             raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
             raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
