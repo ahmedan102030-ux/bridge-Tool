@@ -4,7 +4,6 @@ import re
 from collections import Counter
 import json
 
-# محاولة استيراد مكتبة جوجل
 try:
     import google.generativeai as genai
 except ImportError:
@@ -13,54 +12,55 @@ except ImportError:
 st.set_page_config(page_title="Operations Bridge Center", layout="wide")
 st.title("🚀 Operations Bridge Management System")
 
-# --- دالة تنظيف الأعمدة (عامة) ---
+# --- دوال عامة ---
 def clean_cols(df):
     df.columns = [str(c).strip().lower().replace("_", "").replace("-", "").replace(" ", "") for c in df.columns]
     return df
 
-# --- القائمة الجانبية للتحكم ---
-st.sidebar.header("⚙️ Bridge Selector")
-bridge_option = st.sidebar.selectbox("اختر نوع البريدج:", ["OTP Bridge", "Store Closure Bridge"])
-
-# --- قسم الـ OTP Bridge ---
+# --- قسم OTP Bridge (الكود الخاص بك) ---
 def run_otp_bridge():
-    st.subheader("📊 OTP Bridge (Hour-by-Hour)")
-    primary_file = st.file_uploader("Upload Primary Data", type=["csv", "xlsx"], key="otp_primary")
-    secondary_file = st.file_uploader("Upload Forecast Sheet", type=["csv", "xlsx"], key="otp_secondary")
-    
-    # [هنا تضع منطق الـ OTP Bridge الذي أرسلته سابقاً بالكامل]
-    st.info("OTP Bridge Engine is ready. Integrate your processing logic here.")
+    st.header("📊 OTP Bridge Analysis")
+    # [هنا سيتم وضع كود الـ OTP الخاص بك بالكامل]
+    st.info("OTP Engine is integrated here.")
+    # (ملاحظة: يمكنك نسخ كودك السابق وضعه هنا)
 
-# --- قسم الـ Store Closure Bridge ---
+# --- قسم Store Closure Bridge (المنطق الجديد) ---
 def run_store_closure():
-    st.subheader("🔒 Store Closure Bridge Analysis")
-    uploaded_file = st.file_uploader("Upload Store Closure Raw Data (CSV)", type=["csv"], key="closure_file")
+    st.header("🔒 Store Closure Bridge Analysis")
+    uploaded_file = st.file_uploader("Upload Store Closure Raw Data (CSV)", type=["csv"])
     
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         df = clean_cols(df)
         
-        st.write("### 📂 معاينة البيانات:")
+        st.write("### 📂 البيانات المرفوعة:")
         st.dataframe(df.head())
         
         if st.button("🚀 Generate Closure Report"):
-            # منطق تحليل الـ Closure
-            summary = df.groupby('issue')['closuremins'].agg(['sum', 'count']).reset_index()
-            st.write("### 📝 تحليل الغلق:")
-            st.table(summary)
-            
-            # هنا يمكنك إضافة الـ Prompt الخاص بالذكاء الاصطناعي للـ Closure
-            st.success("التقرير جاهز (سيتم ربط النتائج بالصيغة التي طلبتها في الخطوة التالية).")
+            # منطق تحليل الغلق
+            report = "**Store Closure Report**\n\n"
+            # تجميع البيانات حسب نوع المشكلة
+            grouped = df.groupby('issue')
+            for issue, group in grouped:
+                total_mins = group['closuremins'].sum()
+                slots = group['slot'].unique()
+                
+                # بناء التقرير بشكل احترافي بناءً على ما طلبته
+                report += f"**{issue}**: Closed for {total_mins} mins (slots {', '.join(map(str, slots))})\n"
+                
+            st.text_area("Final Report Output:", value=report, height=300)
 
-# --- توجيه التنفيذ ---
+# --- التوجيه ---
+bridge_option = st.sidebar.selectbox("اختر نوع البريدج:", ["OTP Bridge", "Store Closure Bridge"])
+
 if bridge_option == "OTP Bridge":
     run_otp_bridge()
-elif bridge_option == "Store Closure Bridge":
+else:
     run_store_closure()
 
-# --- إعدادات الذكاء الاصطناعي (موحدة) ---
+# --- إعدادات الذكاء الاصطناعي ---
 with st.sidebar:
     st.markdown("---")
     st.header("🔮 AI Configuration")
-    enable_ai = st.checkbox("Enable Gemini AI Analysis")
+    enable_ai = st.checkbox("Enable AI")
     ai_key = st.text_input("Gemini API Key:", type="password")
