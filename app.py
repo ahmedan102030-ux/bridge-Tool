@@ -95,7 +95,7 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-# الدالة الذكية (Gemini AI Logic) - بتشتغل بس لما تفعل الزرار
+# الدالة الذكية بعد تحديث الـ URL النهائي لتفادي خطأ 404
 def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str, key):
     real_percentage = (count / total_vol) * 100
     hour_counts = dict(Counter(hours_list))
@@ -114,7 +114,8 @@ def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str,
         f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
     )
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+    # تم تعديل الرابط هنا ليكون الاصدار المستقر v1 من جوجل
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
@@ -200,7 +201,6 @@ if primary_file:
         report_text += "Dear Team,\n\n"
         report_text += f"This report provides an operational overview of metrics relative to a Total Volume of {total_volume:,} orders, capturing {total_incidents} logged incidents.\n\n"
         
-        # شريط تحميل يوضح حالة المعالجة
         progress_bar = st.progress(0)
         total_reasons = len(summary_df)
         
@@ -209,7 +209,6 @@ if primary_file:
             suffix = ' "Courier Support"' if "multi package" in row._1.lower() else ""
             report_text += f"{idx}- {row._1}: {row.Count} cases ({v_percentage:.2f}% of Total Volume){suffix}\n"
             
-            # القرار هنا: هل الـ AI شغال والـ Key موجود؟
             if enable_ai and ai_key:
                 context_string = generate_ai_context(row._1, row.Count, total_volume, row.HoursList, forecast_str_for_ai, ai_key)
             else:
