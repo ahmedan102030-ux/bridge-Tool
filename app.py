@@ -42,7 +42,7 @@ def clean_input(text):
 def get_ai_context(summary_df, total_vol, forecast_str, key):
     data_list = []
     for row in summary_df.itertuples():
-        data_list.append({"Issue": row._1, "Count": row.Count})
+        data_list.append({"Issue": row.sub_reason, "Count": row.Count})
     
     prompt = f"Analyze these logistics issues and write a 2-line context for each: {json.dumps(data_list)}. Forecast: {forecast_str}. Return JSON only."
     
@@ -59,18 +59,28 @@ def get_ai_context(summary_df, total_vol, forecast_str, key):
 
 if primary_file:
     df = pd.read_excel(primary_file) if primary_file.name.endswith('.xlsx') else pd.read_csv(primary_file)
-    df.columns = [str(c).replace(" ", "_").lower() for c in df.columns]
+    df.columns = [str(c).strip().lower().replace(" ", "_").replace("-", "") for c in df.columns]
     
-    if "sub_reason" in df.columns:
+    # Smart detection for the Sub-reason column
+    target_col = None
+    for col in df.columns:
+        if "sub" in col or "reason" in col:
+            target_col = col
+            break
+            
+    if target_col:
+        df = df.rename(columns={target_col: "sub_reason"})
         df["sub_reason"] = df["sub_reason"].apply(clean_input)
-    
-    if st.button("Generate Report"):
-        summary = df.groupby("sub_reason").size().reset_index(name="Count")
-        ai_resp = get_ai_context(summary, total_volume, "N/A", ai_key) if enable_ai else {}
         
-        st.subheader("Generated Report")
-        out = f"Operational Bridge Report\nTotal Volume: {total_volume}\n\n"
-        for row in summary.itertuples():
-            out += f"- {row._1}: {row.Count} cases. "
-            out += f"Context: {ai_resp.get(row._1, 'Standard operational fluctuation.')}\n"
-        st.text_area("Final Output:", value=out, height=400)
+        if st.button("Generate Report"):
+            summary = df.groupby("sub_reason").size().reset_index(name="Count")
+            ai_resp = get_ai_context(summary, total_volume, "N/A", ai_key) if enable_ai else {}
+            
+            st.subheader("Generated Report")
+            out = f"Operational Bridge Report\nTotal Volume: {total_volume:,}\n\n"
+            for row in summary.itertuples():
+                out += f"- {row.sub_reason}: {row.Count} cases. "
+                out += f"Context: {ai_resp.get(row.sub_reason, 'Standard operational fluctuation.')}\n"
+            st.text_area("Final Output:", value=out, height=400)
+    else:
+        st.error(f"Could not find a 'Sub-reason' column. Found: {list(df.columns)}")
