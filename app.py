@@ -4,7 +4,6 @@ import re
 from collections import Counter
 import requests
 import json
-import time # ضيفنا مكتبة الوقت علشان نهدّي السيرفر
 
 st.set_page_config(page_title="Operations Bridge Assistant", layout="wide")
 st.title("📊 Operations Bridge Assistant (Hour-by-Hour Forecast Matcher)")
@@ -87,36 +86,47 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-def generate_ai_context(reason, count, total_vol, hours_list, forecast_data_str, key):
-    real_percentage = (count / total_vol) * 100
-    hour_counts = dict(Counter(hours_list))
-    
+# الدالة الجبارة الجديدة: بتبعت طلب واحد جماعي لكل الأسباب وتمنع الـ 429 نهائياً
+def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
+    input_data = []
+    for row in summary_df.itertuples():
+        real_percentage = (row.Count / total_vol) * 100
+        hour_counts = dict(Counter(row.HoursList))
+        input_data.append({
+            "Issue": row._1,
+            "Cases": row.Count,
+            "Impact": f"{real_percentage:.2f}%",
+            "Hours_Distribution": hour_counts
+        })
+        
     prompt = (
         f"You are a professional Amazon Logistics Operations Manager analyzing a delivery bridge report.\n"
-        f"Analyze this specific issue and write a concise, professional, 2-line 'Context' for the management report.\n\n"
-        f"Issue Name: {reason}\n"
-        f"Total Cases: {count}\n"
-        f"Impact on Total Volume: {real_percentage:.2f}%\n"
-        f"Hourly Distribution Breakdown: {hour_counts}\n"
-        f"Available Forecast vs Actual Data for matching: {forecast_data_str}\n\n"
-        f"Rules:\n"
-        f"1. Write ONLY the 2 lines of context. No greetings, no intro.\n"
-        f"2. Use professional corporate language (e.g., 'Disruptions peaked during...', 'Driven by volume mismatch...').\n"
-        f"3. Tie the hours to shifts (midday, afternoon, evening) and mention if actual volume exceeded forecast."
+        f"Analyze all the following issues listed in the JSON array below and write a concise, professional, 2-line 'Context' for EACH issue.\n\n"
+        f"Input Issues Data:\n{json.dumps(input_data, indent=2)}\n\n"
+        f"Available Forecast vs Actual Data for matching:\n{forecast_data_str}\n\n"
+        f"CRITICAL RULES:\n"
+        f"1. Respond ONLY with a valid JSON object mapping each 'Issue' name to its 2-line professional string 'Context'.\n"
+        f"2. Format example: {{\"Order Count Issue\": \"Context text here...\", \"Net Issue\": \"Context text here...\"}}\n"
+        f"3. Do not include markdown code block syntax (like ```json). Just the raw JSON object.\n"
+        f"4. Use professional Amazon corporate language. Mention shift peaks and forecast mismatches where applicable."
     )
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+    url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try:
         res = requests.post(url, headers=headers, data=json.dumps(payload))
         if res.status_code == 200:
-            return res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-        else:
-            return f"AI Error ({res.status_code}). Falling back to standard logic: " + generate_standard_context(reason, count, total_vol, hours_list, None)
+            raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+            # تنظيف أي علامات كود لو الـ AI استهبل وكتبها
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("```")[1]
+                if raw_text.startswith("json"): raw_text = raw_text[4:]
+            return json.loads(raw_text.strip())
     except:
-        return generate_standard_context(reason, count, total_vol, hours_list, None)
+        pass
+    return {}
 
 if primary_file:
     if primary_file.name.endswith('.xlsx'): df = pd.read_excel(primary_file)
@@ -185,27 +195,32 @@ if primary_file:
             
         summary_df = pd.DataFrame(summary_data).sort_values(by='Count', ascending=False)
         
+        # جلب الـ AI لجيع الأسباب مرة واحدة لو الخاصية مفعّلة
+        ai_bulk_responses = {}
+        if enable_ai and ai_key:
+            with st.spinner("🔮 AI is analyzing all operational metrics at once... Please wait."):
+                ai_bulk_responses = generate_bulk_ai_contexts(summary_df, total_volume, forecast_str_for_ai, ai_key)
+        
         report_text = f"**Operational Bridge Report - Amazon Egypt Logistics ({report_type})**\n\n"
         report_text += "Dear Team,\n\n"
         report_text += f"This report provides an operational overview of metrics relative to a Total Volume of {total_volume:,} orders, capturing {total_incidents} logged incidents.\n\n"
-        
-        progress_bar = st.progress(0)
-        total_reasons = len(summary_df)
         
         for idx, row in enumerate(summary_df.itertuples(), 1):
             v_percentage = (row.Count / total_volume) * 100
             suffix = ' "Courier Support"' if "multi package" in row._1.lower() else ""
             report_text += f"{idx}- {row._1}: {row.Count} cases ({v_percentage:.2f}% of Total Volume){suffix}\n"
             
-            if enable_ai and ai_key:
-                context_string = generate_ai_context(row._1, row.Count, total_volume, row.HoursList, forecast_str_for_ai, ai_key)
-                time.sleep(2) # 🛑 التعديل السحري هنا: بنخلي الكود يستنى ثانيتين بين كل طلب والتاني علشان نتفادى خطأ 429
+            # سحب الصياغة المجهزة من الـ Bulk Response
+            if enable_ai and ai_key and row._1 in ai_bulk_responses:
+                context_string = ai_bulk_responses[row._1]
             else:
+                # لو الـ AI فشل لأي سبب يقلب علطول على الكود الثابت الآمن
                 context_string = generate_standard_context(row._1, row.Count, total_volume, row.HoursList, forecast_df_clean)
+                if enable_ai and ai_key and not ai_bulk_responses:
+                    context_string = "AI Connection failed. Standard: " + context_string
                 
             if context_string: report_text += f"Context: {context_string}\n\n"
             else: report_text += "\n"
-            progress_bar.progress(idx / total_reasons)
             
         report_text += "Best regards,\nAmazon Egypt Logistics Team"
         st.subheader("📋 Generated Bridge Report")
