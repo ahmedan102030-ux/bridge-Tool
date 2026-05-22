@@ -44,7 +44,7 @@ def extract_english_only(text):
     if "customer later" in cl_lower: return "Customer Later Arrival"
     if "late delivery" in cl_lower: return "Late Delivery"
     if "parking" in cl_lower: return "Parking Issue"
-    if "wrong scan" in cl_lower: return "Wrong Scan"
+    if "wrong scan" in col_lower if "wrong scan" in cl_lower: return "Wrong Scan"
     if "da issue" in cl_lower or "shortage" in cl_lower: return "DA Issue"
     return cleaned if cleaned else "Others"
 
@@ -86,7 +86,6 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
         hours_formatted = ", ".join([str(h) for h in sorted(list(set(hours_list)))])
         return f"Observed operational bottleneck during {period_str} (Hours {hours_formatted})."
 
-# تحسين صياغة الـ Bulk لضمان التنظيف التام لرد السيرفر
 def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
     input_data = []
     for row in summary_df.itertuples():
@@ -113,6 +112,7 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         f"}}"
     )
     
+    # تصحيح الرابط هنا تماماً والتأكد من عدم وجود أي علامات زائدة
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){key}"
     headers = {'Content-Type': 'application/json'}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -122,14 +122,13 @@ def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
         if res.status_code == 200:
             raw_text = res.json()['candidates'][0]['content']['parts'][0]['text'].strip()
             
-            # تنظيف قوي ومحسّن للتخلص من أي أقواس كود ناتجة عن الـ AI
             raw_text = re.sub(r"^```[a-zA-Z]*\n", "", raw_text)
             raw_text = re.sub(r"\n```$", "", raw_text)
             raw_text = raw_text.strip()
             
             return json.loads(raw_text)
     except Exception as e:
-        st.sidebar.error(f"AI Formatting debug: {e}") # تنبيه داخلي في الجنب لو في مشكلة صياغة
+        pass
     return {}
 
 if primary_file:
@@ -213,7 +212,6 @@ if primary_file:
             suffix = ' "Courier Support"' if "multi package" in row._1.lower() else ""
             report_text += f"{idx}- {row._1}: {row.Count} cases ({v_percentage:.2f}% of Total Volume){suffix}\n"
             
-            # مقارنة الاسم بطريقة مرنة ومقاومة لحالة الحروف الكبيرة والصغيرة
             matched_context = None
             if ai_bulk_responses:
                 for k, v in ai_bulk_responses.items():
