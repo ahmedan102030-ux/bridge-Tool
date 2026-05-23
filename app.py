@@ -3,19 +3,16 @@ import pandas as pd
 import re
 from collections import Counter
 import json
-import google.generativeai as genai
 
-# إعدادات الصفحة
+try:
+    import google.generativeai as genai
+except ImportError:
+    st.error("⚠️ Please add 'google-generativeai' to your requirements.txt")
+
 st.set_page_config(page_title="Operations Bridge Center", layout="wide")
 st.title("📊 Operations Bridge Management System")
 
-# --- الإعدادات العامة (Sidebar) ---
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    enable_ai = st.checkbox("🔮 Enable Gemini AI Analysis", value=False)
-    ai_key = st.text_input("Gemini API Key:", type="password", placeholder="AIzaSy...")
-
-# --- تعريف الدوال (Functions الخاصة بك) ---
+# --- الدوال الخاصة بك ---
 def extract_english_only(text):
     txt_str = str(text).strip()
     if txt_str in ["", "nan", "None", "0", "0.0"]: return "Others"
@@ -42,41 +39,41 @@ def generate_standard_context(reason, count, total_vol, hours_list, forecast_df)
     if any(7 <= h <= 15 for h in hours_list): time_periods.append("midday peaks")
     if any(16 <= h <= 23 for h in hours_list): time_periods.append("afternoon and evening shifts")
     period_str = " and ".join(time_periods) if time_periods else "various shifts"
-    return f"Operational bottleneck observed during {period_str}."
+    
+    if "order count" in reason.lower():
+        peak_parts = [f"Hour {h} had {c} cases" for h, c in sorted_hours[:3]]
+        ctx = f"This driver impacted {real_percentage:.2f}% of our total volume. Disruptions concentrated heavily during {period_str}."
+        return ctx
+    return f"Observed operational bottleneck during {period_str}."
 
-def generate_bulk_ai_contexts(summary_df, total_vol, forecast_data_str, key):
-    # (هنا يوضع كود الـ AI الخاص بك كما كان)
-    return {}
+# --- Sidebar ---
+with st.sidebar:
+    st.header("⚙️ AI Configuration")
+    enable_ai = st.checkbox("🔮 Enable Gemini AI Analysis", value=False)
+    ai_key = st.text_input("Enter Gemini API Key:", type="password")
 
-# --- التابات ---
-tab_otp, tab_closure = st.tabs(["📊 OTP Bridge", "🔒 Store Closure Bridge"])
+# --- التنظيم بالـ Tabs ---
+tab1, tab2 = st.tabs(["📊 OTP Bridge", "🔒 Store Closure Bridge"])
 
-# --- Tab 1: OTP Bridge ---
-with tab_otp:
+with tab1:
     st.subheader("1. Upload Primary Data Sheet")
     primary_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"], key="primary_otp")
-    st.subheader("2. Upload Forecast vs Actual Sheet")
     secondary_file = st.file_uploader("Upload Forecast Sheet", type=["xlsx", "csv"], key="secondary_otp")
-    
-    report_type = st.radio("Select Bridge Report Type:", ["Daily Bridge", "Weekly Bridge"], key="otp_type")
-    total_volume = st.number_input("Enter Total Orders Volume:", min_value=1, value=10000, key="vol_otp")
+    report_type = st.radio("Select Bridge Report Type:", ["Daily Bridge", "Weekly Bridge"], key="rpt_type")
+    total_volume = st.number_input("Total Volume:", min_value=1, value=10000, key="vol_otp")
 
     if primary_file:
-        st.success("✅ Data Loaded.")
+        # هنا كود المعالجة بتاعك
         if st.button("🚀 Generate Final Integrated Report", key="gen_otp_final"):
-            # (هنا ضع كود المعالجة والتقرير الخاص بالـ OTP الخاص بك)
-            st.write("Generating OTP Report...")
+            st.write("Processing OTP Logic...")
+            # ضع كود التقرير الخاص بك هنا
 
-# --- Tab 2: Store Closure Bridge ---
-with tab_closure:
-    st.subheader("Store Closure Data Analysis")
+with tab2:
+    st.subheader("Store Closure Analysis")
     closure_file = st.file_uploader("Upload Store Closure CSV", type=["csv"], key="closure_file")
-    
     if closure_file:
         df = pd.read_csv(closure_file)
         df.columns = [str(c).strip().lower().replace("_", "").replace(" ", "") for c in df.columns]
-        st.dataframe(df.head())
-        
         if st.button("🚀 Generate Closure Report", key="gen_closure_final"):
             report = "**Store Closure Report**\n\n"
             for issue, group in df.groupby('issue'):
